@@ -173,8 +173,6 @@
     padding: 20px 0;
     text-align: center;
   }
-
-  /* 分享相关 */
   .share-row {
     display: flex;
     gap: 8px;
@@ -192,10 +190,10 @@
     font-weight: 500;
     white-space: nowrap;
   }
-  .share-row .btn-export { background: #2ecc71; }
-  .share-row .btn-export:hover { background: #27ae60; }
-  .share-row .btn-import { background: #3498db; }
-  .share-row .btn-import:hover { background: #2980b9; }
+  .share-row .btn-url { background: #2ecc71; }
+  .share-row .btn-url:hover { background: #27ae60; }
+  .share-row .btn-text { background: #3498db; }
+  .share-row .btn-text:hover { background: #2980b9; }
   .share-row .btn-clear {
     background: #95a5a6;
     flex: 0 0 44px;
@@ -203,8 +201,6 @@
     font-size: 16px;
   }
   .share-row .btn-clear:hover { background: #7f8c8d; }
-
-  /* 结果弹窗 */
   .result-overlay {
     display: none;
     position: fixed;
@@ -267,8 +263,6 @@
     animation: confetti-fall 0.8s ease forwards;
     opacity: 0;
   }
-
-  /* Toast */
   .toast {
     position: fixed;
     bottom: 30px;
@@ -286,11 +280,7 @@
     white-space: nowrap;
     backdrop-filter: blur(4px);
   }
-  .toast.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   @media (max-width: 640px) {
     .container { padding: 16px; gap: 16px; border-radius: 16px; }
     .list-section { max-width: 100%; min-width: unset; width: 100%; }
@@ -318,14 +308,13 @@
     </div>
     <ul class="food-list" id="foodList"></ul>
     <div class="share-row">
-      <button class="btn-export" id="exportBtn">📤 导出</button>
-      <button class="btn-import" id="importBtn">📥 导入</button>
+      <button class="btn-url" id="urlBtn">🔗 复制网址</button>
+      <button class="btn-text" id="textBtn">📋 复制文字</button>
       <button class="btn-clear" id="clearBtn">🗑️</button>
     </div>
   </div>
 </div>
 
-<!-- 结果弹窗 -->
 <div class="result-overlay" id="resultOverlay">
   <div class="result-card" id="resultCard">
     <span class="emoji-big" id="resultEmoji">🎉</span>
@@ -335,29 +324,18 @@
   </div>
 </div>
 
-<!-- Toast 提示 -->
 <div class="toast" id="toast"></div>
 
 <script>
 (function() {
   'use strict';
-
-  // ========= 配置 =========
   var STORAGE_KEY = 'food-wheel-items';
-  var DEFAULT_FOODS = ['兰州拉面', '沙县小吃', '黄焖鸡', '麻辣烫', '螺蛳粉', '饺子', '蛋炒饭', '煲仔饭', '肠粉', '烧烤', '火锅', '麻辣香锅', '酸菜鱼', '烧腊饭', '寿司', '披萨'];
-  var COLORS = [
-    '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c',
-    '#3498db', '#9b59b6', '#e84393', '#00b894', '#6c5ce7',
-    '#fd79a8', '#00cec9', '#fdcb6e', '#e17055', '#0984e3',
-    '#a29bfe', '#ffeaa7', '#55efc4', '#fab1a0', '#81ecec',
-    '#ff7675', '#74b9ff', '#f8a5c2', '#7bed9f', '#70a1ff',
-    '#ffa502', '#2ed573', '#1e90ff', '#ff6b81', '#badc58'
-  ];
-  var LOGICAL_SIZE = 400;
-  var PI = Math.PI;
-  var TAU = 2 * PI;
+  var DEFAULT_FOODS = ['兰州拉面','沙县小吃','黄焖鸡','麻辣烫','螺蛳粉','饺子','蛋炒饭','煲仔饭','肠粉','烧烤','火锅','麻辣香锅','酸菜鱼','烧腊饭','寿司','披萨'];
+  var COLORS = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e84393','#00b894','#6c5ce7','#fd79a8','#00cec9','#fdcb6e','#e17055','#0984e3','#a29bfe','#ffeaa7','#55efc4','#fab1a0','#81ecec','#ff7675','#74b9ff','#f8a5c2','#7bed9f','#70a1ff','#ffa502','#2ed573','#1e90ff','#ff6b81','#badc58'];
+  var LOGICAL_SIZE = 400, PI = Math.PI, TAU = 2 * PI;
+  // 在线页面地址（jsdelivr CDN 国内可访问）
+  var PAGE_URL = 'https://cdn.jsdelivr.net/gh/yuanwanglaw/food-wheel@main/index.html';
 
-  // ========= DOM =========
   var canvas = document.getElementById('wheelCanvas');
   var ctx = canvas.getContext('2d');
   var foodList = document.getElementById('foodList');
@@ -368,234 +346,107 @@
   var resultName = document.getElementById('resultName');
   var resultEmoji = document.getElementById('resultEmoji');
   var closeResult = document.getElementById('closeResult');
-  var exportBtn = document.getElementById('exportBtn');
-  var importBtn = document.getElementById('importBtn');
+  var urlBtn = document.getElementById('urlBtn');
+  var textBtn = document.getElementById('textBtn');
   var clearBtn = document.getElementById('clearBtn');
   var toast = document.getElementById('toast');
 
-  // ========= 状态 =========
-  var items = [];
-  var currentAngle = 0;
-  var isSpinning = false;
+  var items = [], currentAngle = 0, isSpinning = false;
 
-  // emoji 映射
   var FOOD_EMOJI_MAP = {
-    '面': '🍜', '饭': '🍚', '粉': '🍝', '饺': '🥟', '鸡': '🍗',
-    '鱼': '🐟', '牛': '🥩', '猪': '🥓', '羊': '🐑', '虾': '🦐',
-    '蟹': '🦀', '锅': '🍲', '烤': '🍖', '烧': '🥘', '烫': '🌶️',
-    '辣': '🌶️', '酸': '🍋', '香': '🌿', '披': '🍕', '萨': '🍕',
-    '寿': '🍣', '司': '🍣', '汉': '🍔', '堡': '🍔', '薯': '🍟',
-    '条': '🍟', '汤': '🥣', '凉': '🥗', '拌': '🥗', '包': '🥠',
-    '粥': '🥣', '饼': '🥞', '肠': '🌯', '卷': '🌯', '蛋': '🥚',
-    '豆': '🫘', '菜': '🥬', '肉': '🥩'
+    '面':'🍜','饭':'🍚','粉':'🍝','饺':'🥟','鸡':'🍗','鱼':'🐟','牛':'🥩','猪':'🥓','羊':'🐑','虾':'🦐',
+    '蟹':'🦀','锅':'🍲','烤':'🍖','烧':'🥘','烫':'🌶️','辣':'🌶️','酸':'🍋','香':'🌿','披':'🍕','萨':'🍕',
+    '寿':'🍣','司':'🍣','汉':'🍔','堡':'🍔','薯':'🍟','条':'🍟','汤':'🥣','凉':'🥗','拌':'🥗','包':'🥠',
+    '粥':'🥣','饼':'🥞','肠':'🌯','卷':'🌯','蛋':'🥚','豆':'🫘','菜':'🥬','肉':'🥩'
   };
-
   function getEmoji(name) {
-    for (var key in FOOD_EMOJI_MAP) {
-      if (FOOD_EMOJI_MAP.hasOwnProperty(key) && name.indexOf(key) !== -1) {
-        return FOOD_EMOJI_MAP[key];
-      }
-    }
+    for (var key in FOOD_EMOJI_MAP) { if (FOOD_EMOJI_MAP.hasOwnProperty(key) && name.indexOf(key) !== -1) return FOOD_EMOJI_MAP[key]; }
     return '🍽️';
   }
 
-  // ========= 存储 & 分享 =========
-  function parseHashItems() {
-    try {
-      var hash = window.location.hash;
-      if (!hash || hash.indexOf('#items=') !== 0) return null;
-      var raw = decodeURIComponent(hash.replace('#items=', ''));
-      var list = raw.split('|');
-      var result = [];
-      for (var i = 0; i < list.length; i++) {
-        if (list[i].trim()) result.push(list[i].trim());
-      }
-      return result.length > 0 ? result : null;
-    } catch (e) { return null; }
-  }
-
   function loadItems() {
-    var hashItems = parseHashItems();
-    if (hashItems) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(hashItems)); } catch (e) {}
-      window.location.hash = '';
-      return hashItems;
-    }
     try {
       var saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        var parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
+      if (saved) { var parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length > 0) return parsed; }
     } catch (e) {}
     return DEFAULT_FOODS.slice();
   }
+  function saveItems() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {} }
 
-  function saveItems() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {}
-  }
-
-  // ========= 绘制转盘 =========
   function drawWheel(angle) {
-    var n = items.length;
-    var cx = LOGICAL_SIZE / 2;
-    var cy = LOGICAL_SIZE / 2;
-    var radius = cx - 12;
-
+    var n = items.length, cx = LOGICAL_SIZE / 2, cy = LOGICAL_SIZE / 2, radius = cx - 12;
     ctx.clearRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
-
     if (n === 0) {
-      ctx.fillStyle = '#ecf0f1';
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = '#95a5a6';
-      ctx.font = '22px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('添加食物开始', cx, cy);
-      return;
+      ctx.fillStyle = '#ecf0f1'; ctx.beginPath(); ctx.arc(cx,cy,radius,0,TAU); ctx.fill();
+      ctx.fillStyle = '#95a5a6'; ctx.font = '22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('添加食物开始', cx, cy); return;
     }
-
     if (n === 1) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, TAU);
-      ctx.fillStyle = COLORS[0];
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(items[0], cx, cy);
-      return;
+      ctx.beginPath(); ctx.arc(cx,cy,radius,0,TAU); ctx.fillStyle = COLORS[0]; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(items[0], cx, cy); return;
     }
-
-    var sectorAngle = TAU / n;
-    var fontSize = Math.min(18, Math.max(11, radius * 0.17));
-
+    var sectorAngle = TAU / n, fontSize = Math.min(18, Math.max(11, radius * 0.17));
     for (var i = 0; i < n; i++) {
-      var start = angle + i * sectorAngle;
-      var end = start + sectorAngle;
-
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, radius, start, end);
-      ctx.closePath();
-      ctx.fillStyle = COLORS[i % COLORS.length];
-      ctx.fill();
-
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
+      var start = angle + i * sectorAngle, end = start + sectorAngle;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,radius,start,end); ctx.closePath();
+      ctx.fillStyle = COLORS[i % COLORS.length]; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 2; ctx.stroke();
       var midAngle = start + sectorAngle / 2;
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(midAngle);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold ' + fontSize + 'px "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,0.3)';
-      ctx.shadowBlur = 3;
-
-      var text = items[i];
-      var maxWidth = radius * 0.55;
-      var displayText = text;
-      var charWidth = fontSize * 1.2;
-      if (text.length * charWidth > maxWidth) {
-        var maxChars = Math.floor(maxWidth / charWidth) - 1;
-        displayText = text.slice(0, Math.max(2, maxChars)) + '…';
-      }
-      ctx.fillText(displayText, radius * 0.78, 0);
-      ctx.restore();
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(midAngle);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold '+fontSize+'px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 3;
+      var text = items[i], maxWidth = radius * 0.55, displayText = text;
+      if (text.length * fontSize * 1.2 > maxWidth) { displayText = text.slice(0, Math.max(2, Math.floor(maxWidth / (fontSize * 1.2)) - 1)) + '…'; }
+      ctx.fillText(displayText, radius * 0.78, 0); ctx.restore();
     }
-
-    var grad = ctx.createRadialGradient(cx - 4, cy - 4, 0, cx, cy, radius * 0.18);
-    grad.addColorStop(0, '#fff');
-    grad.addColorStop(0.7, '#f5f5f5');
-    grad.addColorStop(1, '#ddd');
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.15, 0, TAU);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.strokeStyle = '#ccc';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    var grad = ctx.createRadialGradient(cx-4,cy-4,0,cx,cy,radius*0.18);
+    grad.addColorStop(0,'#fff'); grad.addColorStop(0.7,'#f5f5f5'); grad.addColorStop(1,'#ddd');
+    ctx.beginPath(); ctx.arc(cx,cy,radius*0.15,0,TAU); ctx.fillStyle = grad; ctx.fill();
+    ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2; ctx.stroke();
   }
 
-  // ========= 获取中奖项 =========
   function getWinner(angle) {
-    if (items.length === 0) return -1;
-    if (items.length === 1) return 0;
+    if (items.length < 2) return items.length - 1;
     var sectorAngle = TAU / items.length;
-    var normalized = (((-PI/2 - angle) % TAU) + TAU) % TAU;
-    return Math.floor(normalized / sectorAngle) % items.length;
+    return Math.floor(((((-PI/2 - angle) % TAU) + TAU) % TAU) / sectorAngle) % items.length;
   }
 
-  // ========= 旋转动画 =========
   function spin() {
     if (isSpinning || items.length === 0) return;
-    if (items.length === 1) {
-      showResult(0);
-      return;
-    }
-
-    isSpinning = true;
-    spinBtn.disabled = true;
-    spinBtn.textContent = '🌀 旋转中...';
-
+    if (items.length === 1) { showResult(0); return; }
+    isSpinning = true; spinBtn.disabled = true; spinBtn.textContent = '🌀 旋转中...';
     var targetIndex = Math.floor(Math.random() * items.length);
     var sectorAngle = TAU / items.length;
-
-    var targetAngle = -PI/2 - (targetIndex + 0.5) * sectorAngle;
-    targetAngle = ((targetAngle % TAU) + TAU) % TAU;
-
+    var targetAngle = (( (-PI/2 - (targetIndex + 0.5) * sectorAngle) % TAU) + TAU) % TAU;
     var delta = targetAngle - (currentAngle % TAU);
-    var fullSpins = (5 + Math.floor(Math.random() * 4)) * TAU;
     if (delta < 0) delta += TAU;
-    var totalRotation = delta + fullSpins;
-
-    var startAngle = currentAngle;
-    var endAngle = startAngle + totalRotation;
-    var duration = 4000 + Math.random() * 1000;
-    var startTime = performance.now();
-
+    var totalRotation = delta + (5 + Math.floor(Math.random() * 4)) * TAU;
+    var startAngle = currentAngle, endAngle = startAngle + totalRotation;
+    var duration = 4000 + Math.random() * 1000, startTime = performance.now();
     function animate(now) {
-      var elapsed = now - startTime;
-      var progress = Math.min(elapsed / duration, 1);
+      var progress = Math.min((now - startTime) / duration, 1);
       var eased = 1 - Math.pow(1 - progress, 5);
       currentAngle = startAngle + totalRotation * eased;
       drawWheel(currentAngle);
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        currentAngle = endAngle;
-        drawWheel(currentAngle);
-        isSpinning = false;
-        spinBtn.disabled = false;
-        spinBtn.textContent = '🎯 转一转！';
-        var winnerIdx = getWinner(currentAngle);
-        showResult(winnerIdx >= 0 ? winnerIdx : targetIndex);
+      if (progress < 1) { requestAnimationFrame(animate); }
+      else {
+        currentAngle = endAngle; drawWheel(currentAngle);
+        isSpinning = false; spinBtn.disabled = false; spinBtn.textContent = '🎯 转一转！';
+        showResult(getWinner(currentAngle));
       }
     }
     requestAnimationFrame(animate);
   }
 
-  // ========= 显示结果 =========
   function showResult(index) {
     var name = items[index];
-    resultName.textContent = name;
-    resultEmoji.textContent = getEmoji(name);
-
+    resultName.textContent = name; resultEmoji.textContent = getEmoji(name);
     var card = document.getElementById('resultCard');
     var confettis = card.querySelectorAll('.confetti-piece');
     for (var ci = 0; ci < confettis.length; ci++) confettis[ci].remove();
-
     var confettiColors = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#e84393'];
     for (var i = 0; i < 16; i++) {
       var piece = document.createElement('div');
@@ -609,196 +460,99 @@
       piece.style.animationDelay = (Math.random() * 0.3) + 's';
       card.appendChild(piece);
     }
-
     resultOverlay.classList.add('show');
   }
 
-  // ========= 食物列表渲染 =========
   function renderList() {
     foodList.innerHTML = '';
-    if (items.length === 0) {
-      foodList.innerHTML = '<li class="empty-tip">还没有食物，添加一些吧 🍽️</li>';
-      return;
-    }
+    if (items.length === 0) { foodList.innerHTML = '<li class="empty-tip">还没有食物，添加一些吧 🍽️</li>'; return; }
     for (var i = 0; i < items.length; i++) {
-      var name = items[i];
-      var li = document.createElement('li');
+      var name = items[i], li = document.createElement('li');
       li.innerHTML = getEmoji(name) + ' ' + escapeHtml(name) + ' <span class="del">✕</span>';
-      li.title = '点击删除';
-      li.addEventListener('click', makeRemoveHandler(i));
+      li.title = '点击删除'; li.addEventListener('click', makeRemoveHandler(i));
       foodList.appendChild(li);
     }
   }
+  function makeRemoveHandler(idx) { return function(e) { if (e.target.classList.contains('del') || e.target === e.currentTarget) removeItem(idx); }; }
+  function escapeHtml(str) { var div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
 
-  function makeRemoveHandler(idx) {
-    return function(e) {
-      if (e.target.classList.contains('del') || e.target === e.currentTarget) {
-        removeItem(idx);
-      }
-    };
-  }
-
-  function escapeHtml(str) {
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  // ========= 增删食物 =========
   function addItem() {
     var name = foodInput.value.trim();
     if (!name) return;
     if (items.indexOf(name) !== -1) {
-      foodInput.value = '';
-      foodInput.placeholder = '⚠️ 已经添加过了';
-      setTimeout(function() { foodInput.placeholder = '输入食物名称...'; }, 1500);
-      return;
+      foodInput.value = ''; foodInput.placeholder = '⚠️ 已经添加过了';
+      setTimeout(function() { foodInput.placeholder = '输入食物名称...'; }, 1500); return;
     }
     if (items.length >= 30) {
       foodInput.placeholder = '⚠️ 最多 30 项';
-      setTimeout(function() { foodInput.placeholder = '输入食物名称...'; }, 1500);
-      return;
+      setTimeout(function() { foodInput.placeholder = '输入食物名称...'; }, 1500); return;
     }
-    items.push(name);
-    foodInput.value = '';
-    foodInput.focus();
-    saveItems();
-    renderList();
-    drawWheel(currentAngle);
+    items.push(name); foodInput.value = ''; foodInput.focus();
+    saveItems(); renderList(); drawWheel(currentAngle);
   }
+  function removeItem(index) { if (isSpinning) return; items.splice(index,1); saveItems(); renderList(); drawWheel(currentAngle); }
 
-  function removeItem(index) {
-    if (isSpinning) return;
-    items.splice(index, 1);
-    saveItems();
-    renderList();
-    drawWheel(currentAngle);
-  }
-
-  // ========= 导出 / 导入（微信分享用文本） =========
   function showToast(msg, duration) {
     if (!toast) return;
-    toast.textContent = msg;
-    toast.classList.add('show');
+    toast.textContent = msg; toast.classList.add('show');
     clearTimeout(toast._timer);
     toast._timer = setTimeout(function() { toast.classList.remove('show'); }, duration || 2000);
   }
 
   function fallbackCopy(text) {
     var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand('copy');
-      return true;
-    } catch (e) {
-      return false;
-    } finally {
-      document.body.removeChild(ta);
-    }
+    ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); return true; } catch (e) { return false; }
+    finally { document.body.removeChild(ta); }
   }
-
   function copyText(text, successMsg) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function() {
-        showToast(successMsg || '✅ 已复制');
-      }).catch(function() {
-        if (fallbackCopy(text)) showToast(successMsg || '✅ 已复制');
-        else showToast('⚠️ 复制失败，请手动复制');
-      });
-    } else {
-      if (fallbackCopy(text)) showToast(successMsg || '✅ 已复制');
-      else showToast('⚠️ 复制失败，请手动复制');
-    }
+      navigator.clipboard.writeText(text).then(function() { showToast(successMsg || '✅ 已复制'); })
+      .catch(function() { if (!fallbackCopy(text)) showToast('⚠️ 复制失败，请手动复制'); });
+    } else { if (!fallbackCopy(text)) showToast('⚠️ 复制失败，请手动复制'); else showToast(successMsg || '✅ 已复制'); }
   }
 
-  function exportMenu() {
-    if (items.length === 0) {
-      showToast('⚠️ 列表为空，先添加食物吧');
-      return;
-    }
-    var text = items.join('、');
-    copyText(text, '✅ 菜单已复制，发到微信吧！');
+  function copyUrl() {
+    if (items.length === 0) { showToast('⚠️ 列表为空，先添加食物吧'); return; }
+    var encoded = encodeURIComponent(items.join('|'));
+    var url = PAGE_URL + '#items=' + encoded;
+    copyText(url, '✅ 网址已复制，发到微信就能打开！');
   }
-
-  function importMenu() {
-    var input = prompt('粘贴对方发你的菜单（用空格、逗号、顿号隔开都可以）：');
-    if (!input) return;
-    var raw = input.trim();
-    if (!raw) return;
-    // 支持多种分隔符
-    var newItems = raw.split(/[，,、\s|]+/).filter(function(s) { return s.trim(); });
-    if (newItems.length === 0) {
-      showToast('⚠️ 没有识别到食物名称');
-      return;
-    }
-    // 去重并保留顺序
-    var seen = {};
-    var merged = [];
-    for (var i = 0; i < newItems.length; i++) {
-      var name = newItems[i].trim();
-      if (name && !seen[name]) {
-        seen[name] = true;
-        merged.push(name);
-      }
-    }
-    if (merged.length === 0) return;
-    items = merged;
-    saveItems();
-    renderList();
-    drawWheel(currentAngle);
-    showToast('✅ 已导入 ' + merged.length + ' 项！');
+  function copyTextList() {
+    if (items.length === 0) { showToast('⚠️ 列表为空，先添加食物吧'); return; }
+    copyText(items.join('、'), '✅ 菜单已复制，发到微信吧！');
   }
 
   function clearAll() {
     if (isSpinning) return;
     if (items.length === 0) return;
     if (!confirm('确定清空所有食物？此操作不可撤销。')) return;
-    items = [];
-    saveItems();
-    renderList();
-    drawWheel(currentAngle);
-    showToast('🗑️ 已清空');
+    items = []; saveItems(); renderList(); drawWheel(currentAngle); showToast('🗑️ 已清空');
   }
 
-  // ========= 初始化 =========
   function init() {
     var dpr = window.devicePixelRatio || 1;
     var displaySize = Math.min(400, window.innerWidth - 80, 400);
-    canvas.style.width = displaySize + 'px';
-    canvas.style.height = displaySize + 'px';
-    canvas.width = 400 * dpr;
-    canvas.height = 400 * dpr;
-    ctx.scale(dpr, dpr);
-
-    items = loadItems();
-    renderList();
-    drawWheel(currentAngle);
-
+    canvas.style.width = displaySize + 'px'; canvas.style.height = displaySize + 'px';
+    canvas.width = 400 * dpr; canvas.height = 400 * dpr; ctx.scale(dpr, dpr);
+    items = loadItems(); renderList(); drawWheel(currentAngle);
     window.addEventListener('resize', function() {
       var s = Math.min(400, window.innerWidth - 80, 400);
-      canvas.style.width = s + 'px';
-      canvas.style.height = s + 'px';
+      canvas.style.width = s + 'px'; canvas.style.height = s + 'px';
     });
   }
 
-  // ========= 绑定事件 =========
   addBtn.addEventListener('click', addItem);
   spinBtn.addEventListener('click', spin);
-  exportBtn.addEventListener('click', exportMenu);
-  importBtn.addEventListener('click', importMenu);
+  urlBtn.addEventListener('click', copyUrl);
+  textBtn.addEventListener('click', copyTextList);
   clearBtn.addEventListener('click', clearAll);
   closeResult.addEventListener('click', function() { resultOverlay.classList.remove('show'); });
   resultOverlay.addEventListener('click', function(e) { if (e.target === resultOverlay) resultOverlay.classList.remove('show'); });
   foodInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') addItem(); });
-
-  // ========= 启动 =========
   init();
 })();
 </script>
-
 </body>
 </html>
